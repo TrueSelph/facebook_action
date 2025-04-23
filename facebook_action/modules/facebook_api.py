@@ -7,9 +7,9 @@ import random
 import string
 import traceback
 from typing import Optional, Union
-from jvserve.lib.file_interface import file_interface
 
 import requests
+from jvserve.lib.file_interface import file_interface
 
 
 class FacebookAPI:
@@ -832,9 +832,11 @@ class FacebookAPI:
             file_interface.save_file(output_file_path, bytes(file_bytes))
             # retrieve file url
             return file_interface.get_file_url(output_file_path)
-            
+
         else:
-            print(f"Failed to download file from {url}. Status code: {response.status_code}")
+            print(
+                f"Failed to download file from {url}. Status code: {response.status_code}"
+            )
             return None
 
     @staticmethod
