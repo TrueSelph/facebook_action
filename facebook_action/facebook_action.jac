@@ -295,7 +295,7 @@ node FacebookAction :Action: {
                             "status": False,
                             "message": "Each page entry must be represented as a JSON dictionary.",
                             "severity": "error"
-                        }
+                        };
                     }
 
                     # Ensure each page has the required keys with appropriate types
@@ -304,7 +304,7 @@ node FacebookAction :Action: {
                             "status": False,  # Missing required page details
                             "message": "Missing page details",
                             "severity": "error"
-                        }
+                        };
                     }
                 }
 
