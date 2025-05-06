@@ -6,7 +6,7 @@ import os
 import random
 import string
 import traceback
-from typing import Optional, Union
+from typing import Dict, List, Optional, Union
 
 import requests
 from jvserve.lib.file_interface import file_interface
@@ -16,77 +16,108 @@ class FacebookAPI:
     """
     A class to interact with the Facebook Graph API for various actions such as sending messages,
     updating webhooks, and managing Facebook pages.
-
     """
 
     logger = logging.getLogger(__name__)
 
-    # Messenger action
+    def __init__(
+        self,
+        api_url: str,
+        app_secret: str,
+        app_id: str,
+        page_id: str,
+        access_token: str,
+        verify_token: str,
+        fields: Optional[str] = None,
+        timeout: int = 10,
+    ):
+        self.api_url = api_url
+        self.app_secret = app_secret
+        self.app_id = app_id
+        self.page_id = page_id
+        self.access_token = access_token
+        self.verify_token = verify_token
+        self.fields = fields
+        self.timeout = timeout
 
-    @staticmethod
+    def send_rest_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        data: Optional[Dict] = None,
+        json: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
+    ) -> Union[Dict, List]:
+        """Centralized method to send HTTP requests with standardized error handling."""
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+            url = endpoint
+        else:
+            url = f"{self.api_url}{endpoint}"
+
+        try:
+            response = requests.request(
+                method=method.upper(),
+                url=url,
+                params=params,
+                data=data,
+                json=json,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json() if response.content else {}
+        except requests.Timeout as e:
+            self.logger.error(f"Request timed out after {self.timeout} seconds: {e}")
+            return {"error": f"Timeout after {self.timeout} seconds"}
+        except requests.RequestException as e:
+            self.logger.error(f"Request error: {str(e)}")
+            error_details = (
+                e.response.json() if e.response and e.response.content else None
+            )
+            return {"error": str(e), "details": error_details}
+        except Exception as e:
+            self.logger.error(f"Unexpected error: {traceback.format_exc()}")
+            return {"error": str(e)}
+
     def parse_verification_request(
-        request: dict, verify_token: str
-    ) -> Union[str, dict[str, Union[str, int]]]:
+        self, request: Dict
+    ) -> Union[str, Dict[str, Union[str, int]]]:
         """Parses verification request payload and returns the challenge value if the token is valid."""
         try:
-            hub_mode = request.get("hub.mode")  # QueryParams acts like a dictionary
+            hub_mode = request.get("hub.mode")
             hub_verify_token = request.get("hub.verify_token")
             hub_challenge = request.get("hub.challenge")
 
-            # Check if the 'hub.verify_token' matches the expected token and mode is 'subscribe'
-            if hub_verify_token == verify_token and hub_mode == "subscribe":
+            if hub_verify_token == self.verify_token and hub_mode == "subscribe":
                 return hub_challenge if hub_challenge is not None else ""
-
             return {"message": "Invalid token or mode", "code": 403}
-
         except Exception as e:
-            FacebookAPI.logger.error(
-                f"unable to process verification request {traceback.format_exc()}"
+            self.logger.error(
+                f"Unable to process verification request: {traceback.format_exc()}"
             )
             return {"error": str(e)}
 
-    @staticmethod
-    def update_webhook(
-        app_secret: str, app_id: str, api_url: str, webhook: str, verify_token: str
-    ) -> dict:
-        """
-        Update Facebook webhook.
-        :param app_secret: The app secret for your Facebook app.
-        :param app_id: The App ID of your Facebook app.
-        :param webhook: The new webhook URL.
-        :param verify_token: The token used for verifying the callback URL.
-        :return: A dictionary containing the response from the API or an error message.
-        """
-        url = f"{str(api_url)}{str(app_id)}/subscriptions"
-        params = {
-            "access_token": str(app_id) + "|" + str(app_secret),
-        }
+    def update_webhook(self, webhook: str) -> Dict:
+        """Update Facebook webhook."""
+        endpoint = f"{self.app_id}/subscriptions"
+        params = {"access_token": f"{self.app_id}|{self.app_secret}"}
         data = {
             "object": "page",
             "callback_url": webhook,
-            "fields": "messages",
-            "verify_token": verify_token,
+            "fields": self.fields,
+            "verify_token": self.verify_token,
             "include_values": "true",
         }
-
-        response = requests.post(url, params=params, json=data)
-
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
+        return self.send_rest_request("POST", endpoint, params=params, json=data)
 
     @staticmethod
-    def parse_inbound_message(request: dict) -> dict:
+    def parse_inbound_message(request: Dict) -> Dict:
         """Parses message request payload and returns extracted values."""
         payload = {}
         try:
             entry = request["entry"][0]
-            page_id = request["entry"][0]["id"]
+            page_id = entry["id"]
             sender_id = ""
             message_type = ""
             message = ""
@@ -96,17 +127,17 @@ class FacebookAPI:
             parent_message_id = ""
 
             if "changes" in entry:
-                sender_id = entry["changes"][0]["value"]["from"]["id"]
-                sender_name = entry["changes"][0]["value"]["from"]["name"]
-                message_type = entry["changes"][0]["value"]["item"]
-                message = entry["changes"][0]["value"].get("message")
-                if not message:
-                    message = entry["changes"][0]["value"].get("reaction_type")
+                change = entry["changes"][0]["value"]
+                sender_id = change["from"]["id"]
+                sender_name = change["from"]["name"]
+                message_type = change["item"]
+                message = change.get("message") or change.get("reaction_type")
             elif "messaging" in entry:
-                sender_id = entry["messaging"][0]["sender"]["id"]
+                messaging = entry["messaging"][0]
+                sender_id = messaging["sender"]["id"]
                 message_type = "message"
-                message = entry["messaging"][0]["message"].get("text")
-                attachments = entry["messaging"][0]["message"].get("attachments")
+                message = messaging["message"].get("text")
+                attachments = messaging["message"].get("attachments", [])
 
             payload = {
                 "sender_name": sender_name,
@@ -119,60 +150,32 @@ class FacebookAPI:
                 "data": request,
                 "parent_message_id": parent_message_id,
             }
-
         except Exception as e:
-            FacebookAPI.logger.error(f"Error: unable to process inbound message. {e}")
-
+            FacebookAPI.logger.error(f"Error processing inbound message: {e}")
         return payload
 
-    @staticmethod
-    def send_text_message(
-        recipient_id: str, message: str, api_url: str, page_id: str, access_token: str
-    ) -> dict:
+    def send_text_message(self, recipient_id: str, message: str) -> Dict:
         """Send text message to a Facebook user via Messenger."""
-        url = f"{api_url}{page_id}/messages"
+        endpoint = f"{self.page_id}/messages"
         headers = {"Content-Type": "application/json"}
         data = {
-            "recipient": {"id": str(recipient_id)},
+            "recipient": {"id": recipient_id},
             "messaging_type": "RESPONSE",
             "message": {"text": message},
         }
-        params = {"access_token": access_token}
+        params = {"access_token": self.access_token}
+        return self.send_rest_request(
+            "POST", endpoint, headers=headers, json=data, params=params
+        )
 
-        response = requests.post(url=url, headers=headers, json=data, params=params)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
     def send_media(
+        self,
         recipient_id: str,
         media_url: str,
         media_type: str,
-        api_url: str,
-        page_id: str,
-        access_token: str,
-    ) -> dict:
-        """
-        Send a media message (audio, image, video, or document) to a Facebook user via Messenger.
-
-        Args:
-            recipient_id (str): The recipient's Facebook user ID.
-            media_url (str): The URL of the media file.
-            media_type (MediaType): The type of media to send (audio, image, video, or file).
-            api_url (str): The base URL of the Facebook Graph API.
-            page_id (str): The Facebook Page ID.
-            access_token (str): The Page Access Token.
-
-        Returns:
-            dict: The API response as a JSON object or error details.
-        """
-        url = f"{api_url}{page_id}/messages"
+    ) -> Dict:
+        """Send a media message (audio, image, video, or document) to a user via Messenger."""
+        endpoint = f"{self.page_id}/messages"
         headers = {"Content-Type": "application/json"}
         data = {
             "recipient": {"id": recipient_id},
@@ -184,676 +187,271 @@ class FacebookAPI:
                 }
             },
         }
+        params = {"access_token": self.access_token}
+        return self.send_rest_request(
+            "POST", endpoint, headers=headers, json=data, params=params
+        )
 
-        params = {"access_token": access_token}
+    def get_user_info(self, fields: str = "id,name") -> Dict:
+        """Fetches user information from the Facebook Graph API."""
+        endpoint = "me"
+        params = {"fields": fields, "access_token": self.access_token}
+        return self.send_rest_request("GET", endpoint, params=params)
 
-        response = requests.post(url=url, headers=headers, json=data, params=params)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def get_user_info(access_token: str, api_url: str, fields: str = "id,name") -> dict:
-        """
-        Fetches the user field from the Facebook Graph API.
-
-        :param access_token: The access token for the Facebook Graph API.
-        :return: A dictionary containing user information fields, or an error message.
-        """
-        url = f"{str(api_url)}me"
-        params = {"fields": fields, "access_token": access_token}
-
-        response = requests.get(url, params=params)
-
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def list_all_pages(access_token: str, api_url: str, limit: int = 100) -> list:
-        """
-        Lists all pages managed by the user.
-
-        :param access_token: The access token for the Facebook Graph API.
-        :param limit: The number of pages to retrieve in one call (default is 100).
-        :return: A list of dictionaries containing page details, or an error message.
-        """
+    def list_all_pages(self, limit: int = 100) -> List:
+        """Lists all pages managed by the user."""
         all_pages = []
-        url = f"{api_url}me/accounts"
-        params = {"access_token": str(access_token), "limit": str(limit)}
+        endpoint = "me/accounts"
+        params = {"access_token": self.access_token, "limit": limit}
 
         while True:
-            response = requests.get(url, params=params)
-            if response.status_code == 200:
-                json_data = response.json()
-                all_pages.extend(json_data.get("data", []))  # Ensure returning a list
-
-                next_page = json_data.get("paging", {}).get("next")
-                if next_page:
-                    url = next_page
-                    params = {}
-                else:
-                    break
-            else:
-                FacebookAPI.logger.error(
-                    f"Error: {response.status_code} - {response.text}"
-                )
+            response = self.send_rest_request("GET", endpoint, params=params)
+            if "error" in response:
                 return []
-
+            all_pages.extend(response.get("data", []))
+            paging = response.get("paging", {})
+            next_page = paging.get("next")
+            if not next_page:
+                break
+            endpoint = next_page
+            params = {}
         return all_pages
 
-    @staticmethod
     def get_page_details(
-        access_token: str,
-        page_id: str,
-        api_url: str,
+        self,
         fields: str = "id,name,about,fan_count,access_token",
-    ) -> dict:
-        """
-        Fetches details of a Facebook page.
+    ) -> Dict:
+        """Fetches details of a Facebook page."""
+        endpoint = self.page_id
+        params = {"fields": fields, "access_token": self.access_token}
+        return self.send_rest_request("GET", endpoint, params=params)
 
-        :param access_token: The access token for the Facebook Graph API.
-        :param page_id: The ID of the Facebook page.
-        :return: A dictionary containing page details, or an error message.
-        """
-        url = f"{str(api_url)}{str(page_id)}"
-        params = {"access_token": access_token, "fields": fields}
+    def post_message_to_page(self, message: str) -> Dict:
+        """Posts a message to a Facebook page."""
+        endpoint = f"{self.page_id}/feed"
+        headers = {"Content-Type": "application/json"}
+        json_data = {"message": message}
+        params = {"access_token": self.access_token}
+        return self.send_rest_request(
+            "POST", endpoint, headers=headers, json=json_data, params=params
+        )
 
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
+    def get_page_posts(self, limit: int = 10) -> Union[List, Dict]:
+        """Retrieves posts from a Facebook page. Most recent post first."""
+        endpoint = f"{self.page_id}/posts"
+        params = {"access_token": self.access_token, "limit": limit}
+        return self.send_rest_request("GET", endpoint, params=params)
 
-    @staticmethod
-    def post_message_to_page(
-        access_token: str, page_id: str, api_url: str, message: str
-    ) -> dict:
-        """
-        Posts a message to a Facebook page.
+    def get_single_post(self, post_id: str) -> Dict:
+        """Retrieves a single post from a Facebook page by post ID."""
+        endpoint = post_id
+        params = {"access_token": self.access_token}
+        return self.send_rest_request("GET", endpoint, params=params)
 
-        :param access_token: The access token for the Facebook page.
-        :param page_id: The ID of the Facebook page.
-        :param message: The message to be posted.
-        :return: A dictionary containing the post ID, or an error message.
-        """
-        url = f"{api_url}{page_id}/feed"
-        params = {"message": message, "access_token": access_token}
+    def comment_on_post(self, post_id: str, message: str) -> Dict:
+        """Comments on a Facebook post."""
+        endpoint = f"{post_id}/comments"
+        params = {"message": message, "access_token": self.access_token}
+        return self.send_rest_request("POST", endpoint, params=params)
 
-        response = requests.post(url, params=params)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def get_page_posts(
-        access_token: str, page_id: str, api_url: str, limit: int = 10
-    ) -> Union[list, dict]:
-        """
-        Retrieves posts from a Facebook page. Most recent post first.
-
-        :param access_token: The access token for Facebook page.
-        :param page_id: The ID of the Facebook page.
-        :param limit: The number of posts to retrieve (default is 10).
-        :return: A list of posts, or an error message.
-        """
-        url = f"{api_url}{page_id}/posts"
-        params = {"access_token": str(access_token), "limit": str(limit)}
-
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            return response.json().get("data", [])
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def get_single_post(access_token: str, post_id: str, api_url: str) -> dict:
-        """
-        Retrieves a single post from a Facebook page by post ID.
-
-        :param access_token: The access token for Facebook page.
-        :param post_id: The ID of the Facebook post.
-        :param api_url: The base URL of the Facebook Graph API.
-        :return: The post data, or an error message.
-        """
-        url = f"{api_url}{post_id}"
-        params = {"access_token": access_token}
-
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def comment_on_post(
-        access_token: str, post_id: str, api_url: str, message: str
-    ) -> dict:
-        """
-        Comments on a Facebook post.
-
-        :param access_token: The access token for the Facebook page.
-        :param post_id: The ID of the post to comment on.
-        :param message: The comment message.
-        :return: A dictionary containing the comment ID, or an error message.
-        """
-        url = f"{api_url}{post_id}/comments"
-        params = {"message": message, "access_token": access_token}
-
-        response = requests.post(url, params=params)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def post_images_to_page(
-        access_token: str, page_id: str, api_url: str, image_urls: list, caption: str
-    ) -> dict:
-        """
-        Uploads multiple photos to a Facebook page using URLs with an optional caption.
-
-        :param access_token: The access token for the Facebook page.
-        :param page_id: The ID of the Facebook page.
-        :param api_url: The base URL of the Facebook Graph API.
-        :param image_urls: A list of URLs of the photos.
-        :param caption: The caption for the photos.
-        :return: A dictionary containing the post ID, or an error message.
-        """
-
+    def post_images_to_page(self, image_urls: List[str], caption: str) -> Dict:
+        """Uploads multiple photos to a Facebook page using URLs."""
         image_ids = []
-
         for image_url in image_urls:
-            url = f"{api_url}{page_id}/photos"
+            endpoint = f"{self.page_id}/photos"
             params = {
-                "access_token": access_token,
+                "access_token": self.access_token,
                 "url": image_url,
-                "published": "false",  # Delay publishing until all photos are uploaded
+                "published": "false",
             }
+            response = self.send_rest_request("POST", endpoint, params=params)
+            if "error" not in response:
+                image_ids.append(response.get("id"))
 
-            response = requests.post(url, params=params)
-            if response.status_code == 200:
-                image_ids.append(response.json().get("id"))
+        if not image_ids:
+            return {"error": "Failed to upload any images"}
 
-        # Create a post with the uploaded images
-        post_url = f"{api_url}{page_id}/feed"
-        post_params = {
-            "access_token": access_token,
+        endpoint = f"{self.page_id}/feed"
+        params = {"access_token": self.access_token}
+        json_data = {
             "message": caption,
-            "attached_media": [{"media_fbid": image_id} for image_id in image_ids],
+            "attached_media": [{"media_fbid": _id} for _id in image_ids],
         }
+        return self.send_rest_request("POST", endpoint, params=params, json=json_data)
 
-        post_response = requests.post(post_url, json=post_params)
-        if post_response.status_code == 200:
-            return post_response.json()
-        else:
-            FacebookAPI.logger.error(
-                f"Error: {post_response.status_code} - {post_response.text}"
-            )
-            return {
-                "error": f"Facebook API: Unexpected status code: {post_response.status_code}",
-                "details": post_response.json() if post_response.content else None,
-            }
-
-    @staticmethod
     def post_videos_to_page(
-        access_token: str,
-        page_id: str,
-        api_url: str,
-        title: str,
-        caption: str,
-        video_urls: list,
-    ) -> dict:
-        """
-        Uploads multiple videos to a Facebook page using URLs with an optional caption.
-
-        :param access_token: The access token for the Facebook page.
-        :param page_id: The ID of the Facebook page.
-        :param api_url: The base URL of the Facebook Graph API.
-        :param title: The title of the video.
-        :param caption: The caption for the video.
-        :param video_urls: A list of URLs of the videos.
-        :return: A dictionary containing the post ID, or an error message.
-        """
-
+        self, title: str, caption: str, video_urls: List[str]
+    ) -> Dict:
+        """Uploads multiple videos to a Facebook page using URLs."""
         video_ids = []
         for video_url in video_urls:
-            url = f"{api_url}{page_id}/videos"
-
+            endpoint = f"{self.page_id}/videos"
             params = {
-                "access_token": access_token,
+                "access_token": self.access_token,
                 "title": title,
                 "file_url": video_url,
             }
+            response = self.send_rest_request("POST", endpoint, params=params)
+            if "error" not in response:
+                video_ids.append(response.get("id"))
 
-            response = requests.post(url, params=params)
-            if response.status_code == 200:
-                video_ids.append(response.json().get("id"))
+        if not video_ids:
+            return {"error": "Failed to upload any videos"}
 
-        post_url = f"{api_url}{page_id}/feed"
-        post_params = {
-            "access_token": access_token,
+        endpoint = f"{self.page_id}/feed"
+        params = {"access_token": self.access_token}
+        json_data = {
             "message": caption,
-            "attached_media": [{"media_fbid": image_id} for image_id in video_ids],
+            "attached_media": [{"media_fbid": _id} for _id in video_ids],
         }
-
-        post_response = requests.post(post_url, json=post_params)
-        if post_response.status_code == 200:
-            return post_response.json()
-        else:
-            FacebookAPI.logger.error(
-                f"Error: {post_response.status_code} - {post_response.text}"
-            )
-            return {
-                "error": f"Facebook API: Unexpected status code: {post_response.status_code}",
-                "details": post_response.json() if post_response.content else None,
-            }
+        return self.send_rest_request("POST", endpoint, params=params, json=json_data)
 
     @staticmethod
     def get_mime_type(
         file_path: Optional[str] = None,
         url: Optional[str] = None,
         mime_type: Optional[str] = None,
-    ) -> Optional[dict]:
-        """Determine the MIME type of a file or URL and categorize it into common file types."""
+    ) -> Optional[Dict]:
+        """Determine the MIME type of a file or URL and categorize it."""
         detected_mime_type = None
 
         if file_path:
-            # Use mimetypes to guess MIME type based on file extension
             detected_mime_type, _ = mimetypes.guess_type(file_path)
         elif url:
-            # Make a HEAD request to get the Content-Type header
             try:
                 response = requests.head(url, allow_redirects=True)
                 detected_mime_type = response.headers.get("Content-Type")
-            except requests.RequestException as e:
-                print(f"Error making HEAD request: {e}")
+            except requests.RequestException:
                 return None
         else:
-            # Fallback to initial MIME type if provided
             detected_mime_type = mime_type
 
-        # MIME type categories
-        image_mime_types = [
-            "image/jpeg",
-            "image/png",
-            "image/gif",
-            "image/bmp",
-            "image/webp",
-            "image/tiff",
-            "image/svg+xml",
-            "image/x-icon",
-            "image/heic",
-            "image/heif",
-            "image/x-raw",
-        ]
-        document_mime_types = [
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/vnd.ms-excel",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.ms-powerpoint",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "text/plain",
-            "text/csv",
-            "text/html",
-            "application/rtf",
-            "application/x-tex",
-            "application/vnd.oasis.opendocument.text",
-            "application/vnd.oasis.opendocument.spreadsheet",
-            "application/epub+zip",
-            "application/x-mobipocket-ebook",
-            "application/x-fictionbook+xml",
-            "application/x-abiword",
-            "application/vnd.apple.pages",
-            "application/vnd.google-apps.document",
-        ]
-        audio_mime_types = [
-            "audio/mpeg",
-            "audio/wav",
-            "audio/ogg",
-            "audio/flac",
-            "audio/aac",
-            "audio/mp3",
-            "audio/webm",
-            "audio/amr",
-            "audio/midi",
-            "audio/x-m4a",
-            "audio/x-realaudio",
-            "audio/x-aiff",
-            "audio/x-wav",
-            "audio/x-matroska",
-        ]
-        video_mime_types = [
-            "video/mp4",
-            "video/mpeg",
-            "video/ogg",
-            "video/webm",
-            "video/quicktime",
-            "video/x-msvideo",
-            "video/x-matroska",
-            "video/x-flv",
-            "video/x-ms-wmv",
-            "video/3gpp",
-            "video/3gpp2",
-            "video/h264",
-            "video/h265",
-            "video/x-f4v",
-            "video/avi",
-        ]
+        image_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+        document_types = ["application/pdf", "text/plain"]
+        audio_types = ["audio/mpeg", "audio/wav"]
+        video_types = ["video/mp4", "video/quicktime"]
 
-        # Handle cases where MIME type cannot be detected
-        if detected_mime_type is None or detected_mime_type == "binary/octet-stream":
-            if file_path:
-                _, file_extension = os.path.splitext(file_path)
-            elif url:
-                _, file_extension = os.path.splitext(url)
-            else:
-                file_extension = ""
-
-            detected_mime_type = mimetypes.types_map.get(file_extension.lower())
-
-        # Categorize MIME type
-        if detected_mime_type in image_mime_types:
+        if detected_mime_type in image_types:
             return {"file_type": "image", "mime": detected_mime_type}
-        elif detected_mime_type in document_mime_types:
+        elif detected_mime_type in document_types:
             return {"file_type": "document", "mime": detected_mime_type}
-        elif detected_mime_type in audio_mime_types:
+        elif detected_mime_type in audio_types:
             return {"file_type": "audio", "mime": detected_mime_type}
-        elif detected_mime_type in video_mime_types:
+        elif detected_mime_type in video_types:
             return {"file_type": "video", "mime": detected_mime_type}
         else:
-            print(f"Unsupported MIME Type: {detected_mime_type}")
             return {"file_type": "unknown", "mime": detected_mime_type}
 
-    @staticmethod
-    def post_media_to_page(
-        access_token: str, page_id: str, api_url: str, caption: str, media_urls: list
-    ) -> dict:
-        """
-        Posts media (images or videos) to a Facebook page using URLs with an optional caption.
-
-        :param access_token: The access token for the Facebook page.
-        :param page_id: The ID of the Facebook page.
-        :param api_url: The base URL of the Facebook Graph API.
-        :param caption: The caption for the media.
-        :param media_urls: A list of URLs of the media.
-        :return: A dictionary containing the post ID, or an error message.
-        """
-
+    def post_media_to_page(self, caption: str, media_urls: List[Dict]) -> Dict:
+        """Posts media (images or videos) to a Facebook page using URLs."""
         media_ids = []
-        for media_url in media_urls:
-            mime_info = FacebookAPI.get_mime_type(url=media_url["url"])
+        for media in media_urls:
+            media_url = media.get("url")
+            mime_info = self.get_mime_type(url=media_url)
             media_type = mime_info.get("file_type") if mime_info else None
+
             if media_type == "video":
-                url = f"{api_url}{page_id}/videos"
-
-                params = {"access_token": access_token, "file_url": media_url}
-            elif media_type == "image":
-                url = f"{api_url}{page_id}/photos"
+                endpoint = f"{self.page_id}/videos"
                 params = {
-                    "access_token": access_token,
-                    "url": media_url,
-                    "published": "false",  # Delay publishing until all photos are uploaded
+                    "access_token": self.access_token,
+                    "file_url": media_url,
                 }
-            if params and url:
-                response = requests.post(url, params=params)
-                if response.status_code == 200:
-                    media_ids.append(response.json().get("id"))
+            elif media_type == "image":
+                endpoint = f"{self.page_id}/photos"
+                params = {
+                    "access_token": self.access_token,
+                    "url": media_url,
+                    "published": "false",
+                }
+            else:
+                continue
 
-        post_url = f"{api_url}{page_id}/feed"
-        post_params = {
-            "access_token": access_token,
+            response = self.send_rest_request("POST", endpoint, params=params)
+            if "error" not in response:
+                media_ids.append(response.get("id"))
+
+        if not media_ids:
+            return {"error": "No valid media uploaded"}
+
+        endpoint = f"{self.page_id}/feed"
+        params = {"access_token": self.access_token}
+        json_data = {
             "message": caption,
-            "attached_media": [{"media_fbid": media_id} for media_id in media_ids],
+            "attached_media": [{"media_fbid": _id} for _id in media_ids],
         }
+        return self.send_rest_request("POST", endpoint, params=params, json=json_data)
 
-        post_response = requests.post(post_url, json=post_params)
-        if post_response.status_code == 200:
-            return post_response.json()
-        else:
-            FacebookAPI.logger.error(
-                f"Error: {post_response.status_code} - {post_response.text}"
-            )
-            return {
-                "error": f"Facebook API: Unexpected status code: {post_response.status_code}",
-                "details": post_response.json() if post_response.content else None,
-            }
+    def get_post_comments(self, post_id: str, limit: int = 10) -> Union[List, Dict]:
+        """Retrieves comments on a Facebook post."""
+        endpoint = f"{post_id}/comments"
+        params = {"access_token": self.access_token, "limit": limit}
+        return self.send_rest_request("GET", endpoint, params=params)
 
-    @staticmethod
-    def get_post_comments(
-        access_token: str, post_id: str, api_url: str, limit: int = 10
-    ) -> Union[list, dict]:
-        """
-        Retrieves comments on a Facebook post.
+    def reply_to_comment(self, comment_id: str, message: str) -> Dict:
+        """Replies to a comment on a Facebook post."""
+        endpoint = f"{comment_id}/comments"
+        params = {"message": message, "access_token": self.access_token}
+        return self.send_rest_request("POST", endpoint, params=params)
 
-        :param access_token: The access token for the Facebook page.
-        :param post_id: The ID of the post to get comments from.
-        :param limit: The number of comments to retrieve (default is 10).
-        :return: A list of comments, or an error message.
-        """
-
-        url = f"{api_url}{post_id}/comments"
-        params = {"access_token": access_token, "limit": str(limit)}
-
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            return response.json().get("data", [])
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def reply_to_comment(
-        access_token: str, comment_id: str, api_url: str, message: str
-    ) -> dict:
-        """
-        Replies to a comment on a Facebook post.
-
-        :param access_token: The access token for the Facebook Graph API.
-        :param comment_id: The ID of the comment to reply to.
-        :param message: The reply message.
-        :return: A dictionary containing the reply ID, or an error message.
-        """
-        url = f"{api_url}{comment_id}/comments"
-        params = {"message": message, "access_token": access_token}
-
-        response = requests.post(url, params=params)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
     def reply_to_comment_with_attachment(
-        access_token: str, comment_id: str, api_url: str, attachment_url: str
-    ) -> dict:
-        """
-        Replies to a comment on a Facebook post with an attachment.
+        self, comment_id: str, attachment_url: str
+    ) -> Dict:
+        """Replies to a comment with an attachment."""
+        endpoint = f"{comment_id}/comments"
+        data = {"attachment_url": attachment_url, "access_token": self.access_token}
+        return self.send_rest_request("POST", endpoint, data=data)
 
-        :param access_token: The access token for the Facebook Graph API.
-        :param comment_id: The ID of the comment to reply to.
-        :param attachment_url: The URL of the attachment to include in the reply.
-        :return: A dictionary containing the reply ID, or an error message.
-        """
+    def update_comment(self, comment_id: str, message: str) -> Dict:
+        """Updates a comment on a Facebook post."""
+        endpoint = comment_id
+        data = {"message": message, "access_token": self.access_token}
+        return self.send_rest_request("POST", endpoint, data=data)
 
-        url = f"{api_url}{comment_id}/comments"
-        data = {"attachment_url": attachment_url, "access_token": access_token}
+    def like_comment(self, comment_id: str) -> Dict:
+        """Likes a comment on a Facebook post."""
+        endpoint = f"{comment_id}/likes"
+        params = {"access_token": self.access_token}
+        return self.send_rest_request("POST", endpoint, params=params)
 
-        response = requests.post(url, data=data)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def update_comment(
-        access_token: str, api_url: str, comment_id: str, message: str
-    ) -> dict:
-        """
-        Replies to a comment on a Facebook post.
-
-        :param access_token: The access token for the Facebook Graph API.
-        :param comment_id: The ID of the comment to reply to.
-        :param message: The reply message.
-        :return: A dictionary containing the reply ID, or an error message.
-        """
-        url = f"{api_url}{comment_id}"
-        data = {"message": message, "access_token": access_token}
-
-        response = requests.post(url, data=data)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def like_comment(access_token: str, comment_id: str, api_url: str) -> dict:
-        """
-        Likes a comment on a Facebook post.
-
-        :param access_token: The access token for the Facebook page.
-        :param comment_id: The ID of the comment to like.
-        :return: A dictionary indicating success, or an error message.
-        """
-
-        url = f"{api_url}{comment_id}/likes"
-        params = {"access_token": access_token}
-
-        response = requests.post(url, params=params)
-        if response.status_code == 200:
-            return {"success": True}
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
-
-    @staticmethod
-    def get_reactions(
-        access_token: str, post_id: str, api_url: str
-    ) -> Union[list, dict]:
-        """
-        Retrieves the number of reactions on a Facebook post.
-
-        :param access_token: The access token for the Facebook Graph API.
-        :param post_id: The ID of the post to get reactions count for.
-        :return: A dictionary with the count of each reaction type, or an error message.
-        """
-        url = f"{api_url}{post_id}/reactions"
-        params = {
-            # "summary": "true",
-            "access_token": access_token
-        }
-
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            return response.json().get("data", [])
-        else:
-            FacebookAPI.logger.error(f"Error: {response.status_code} - {response.text}")
-            return {
-                "error": f"Facebook API: Unexpected status code: {response.status_code}",
-                "details": response.json() if response.content else None,
-            }
+    def get_reactions(self, post_id: str) -> Union[List, Dict]:
+        """Retrieves reactions on a Facebook post."""
+        endpoint = f"{post_id}/reactions"
+        params = {"access_token": self.access_token}
+        return self.send_rest_request("GET", endpoint, params=params)
 
     @staticmethod
     def download_file(url: str) -> Optional[str]:
-        """Download a file from a URL and save it to a specified folder. Returns a web-accessible URL"""
-        # Send a HEAD request to get metadata about the file
-        response = requests.head(url, allow_redirects=True)
-        content_type = response.headers.get("Content-Type", "")
+        """Download a file from a URL and save it. Returns a web-accessible URL."""
+        try:
+            response = requests.head(url, allow_redirects=True)
+            content_type = response.headers.get("Content-Type", "")
+            extension = mimetypes.guess_extension(content_type.split(";")[0])
+            if not extension:
+                return None
 
-        extension = mimetypes.guess_extension(content_type.split(";")[0])
-        if not extension:
-            print("Could not determine the file extension.")
-            return None
-
-        random_filename = (
-            "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
-            + extension
-        )
-        output_file_path = f"fb/{random_filename}"
-
-        response = requests.get(url, stream=True)
-        if response.status_code == 200:
-            file_bytes = bytearray()
-            for chunk in response.iter_content(chunk_size=1024):
-                if chunk:
-                    file_bytes.extend(chunk)
-            # output the file
-            file_interface.save_file(output_file_path, bytes(file_bytes))
-            # retrieve file url
-            return file_interface.get_file_url(output_file_path)
-
-        else:
-            print(
-                f"Failed to download file from {url}. Status code: {response.status_code}"
+            filename = (
+                "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+                + extension
             )
+            output_path = f"fb/{filename}"
+
+            response = requests.get(url, stream=True)
+            if response.status_code == 200:
+                file_bytes = bytearray()
+                for chunk in response.iter_content(chunk_size=1024):
+                    if chunk:
+                        file_bytes.extend(chunk)
+                file_interface.save_file(output_path, bytes(file_bytes))
+                return file_interface.get_file_url(output_path)
+            return None
+        except Exception:
             return None
 
-    @staticmethod
-    def share_facebook_post(post_id: str, access_token: str) -> str:
-        """
-        Fetches the permalink URL of a Facebook post using the Graph API.
-
-        :param post_id: The Facebook post ID (format: page_id_post_id)
-        :param access_token: The Facebook API access token
-        :return: The permalink URL if successful, else an error message
-        """
-        url = f"https://graph.facebook.com/{post_id}?fields=permalink_url&access_token={access_token}"
-
-        response = requests.get(url)
-        data = response.json()
-
-        if "permalink_url" in data:
-            return data["permalink_url"]
-        else:
-            return f"Error: {data.get('error', 'Unknown error')}"
+    def share_facebook_post(self, post_id: str) -> Dict:
+        """Fetches the permalink URL of a Facebook post."""
+        endpoint = post_id
+        params = {"fields": "permalink_url", "access_token": self.access_token}
+        response = self.send_rest_request("GET", endpoint, params=params)
+        if "permalink_url" in response:
+            return {"status": "success", "data": response["permalink_url"]}
+        return {"status": "error", "message": response.get("error", "Unknown error")}

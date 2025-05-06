@@ -30,9 +30,8 @@ walker facebook_interact :interact_graph_walker: {
             disengage;
         }
 
-
-        if( action_node:=(here.get_actions().get(action_label='FacebookAction')) ) {
-            if(not action_node.enabled and not action_node.messenger_enabled) {
+        if( action_node:=(here.get_action(action_label='FacebookAction')) ) {
+            if(not action_node.enabled) {
                 Jac.get_context().status = 200;
                 disengage;
             }
@@ -43,7 +42,6 @@ walker facebook_interact :interact_graph_walker: {
                 disengage;
             }
 
-
             # parse data if we've gotten this far..
             data = FacebookAPI.parse_inbound_message(request = self.params);
             if(not data) {
@@ -52,7 +50,7 @@ walker facebook_interact :interact_graph_walker: {
             }
 
             # determine if phone number has access
-            access_control_action_node = here.get_actions().get(action_label='AccessControlAction');
+            access_control_action_node = here.get_action(action_label='AccessControlAction');
             if(access_control_action_node) {
                 access = access_control_action_node.has_action_access(
                     session_id=data['sender_id'],
