@@ -27,7 +27,7 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
         st.markdown("### Webhook Registration")
         st.markdown(
             "Click the button below to register the webhook. "
-            "This enables your agent to communicate with WhatsApp."
+            "This enables your agent to communicate with Facebook."
         )
 
         # Register Webhook button
