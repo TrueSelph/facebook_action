@@ -264,6 +264,42 @@ node FacebookAction :Action: {
     }
 
 
+    can post_message(message:str, post_link:bool = True) -> dict {
+
+        post_result = self.api().post_message_to_page(message=message);
+        return post_result;
+    }
+
+
+    can post_images(image_urls:list, caption:str, post_link:bool = True) -> dict {
+        media_urls = [];
+        for video_url in image_urls {
+            if(url := self.serve_file_url(video_url)) {
+                media_urls.append(url);
+            }
+        }
+
+        post_result = self.api().post_images_to_page(image_urls=media_urls, caption=caption);
+        return post_result;
+    }
+
+
+    can post_videos(video_urls:list, caption:str, title:str = "", post_link:bool = True) -> dict {
+        media_urls = [];
+        for video_url in video_urls {
+            if(url := self.serve_file_url(video_url)) {
+                media_urls.append(url);
+            }
+        }
+        post_result = self.api().post_videos_to_page(title=title, caption=caption, video_urls=media_urls);
+        return post_result;
+    }
+
+    can serve_file_url(url:str) -> dict {
+        # accepts a temporary web url of a file, downloads it and serves it from jv file service
+        return self.api().download_file(url);
+    }
+
 
     can prepare_interaction_message(message:dict) -> InteractionMessage {
         # prepare the interaction message based on the message type
