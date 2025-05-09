@@ -30,9 +30,18 @@ node FacebookAction :Action: {
     has subscribed_fields: str = "feed,messages";
     has webhook_verify_token:str = "123";
     # API settings
-    has chunk_length:int = 1024;
     has use_pushname:bool = True;
-    has request_timeout:int = 10; # the length of time this action waits for api to complete request
+    has chunk_length:int = 1024;
+    has request_timeout:int = 10;
+    # outbox settings
+    has outbox_base_rate_per_minute:int = 20;  # facebook API rate limit for sending messages
+    has outbox_send_interval:float = 1.0; # the interval (delay) in seconds between sending messages from the outbox
+    has outbox_min_send_interval:float = 1.0; # the minimum interval (delay) in seconds between sending messages from the outbox
+    has outbox_max_send_interval:float = 10.0; # the maximum interval (delay) in seconds between sending messages from the outbox
+    has outbox_min_batch_size:int = 1; # the minimum batch size of messages to send from the outbox
+    has outbox_max_batch_size:int = 10; # the maximum batch size of messages to send from the outbox
+    has outbox:dict = {}; # outbox for outgoing mass messages
+
 
 
     can on_enable() {
@@ -168,7 +177,6 @@ node FacebookAction :Action: {
 
     can send_message(session_id:str, message:InteractionMessage) -> dict {
         # processes an agent response payload format and sends an Facebook message to a specified session_id via the action
-        result = {};
         if(message and session_id) {
             parent_message_id = message.get_meta('parent_message_id');
 
@@ -189,8 +197,6 @@ node FacebookAction :Action: {
                     result = self.api().send_media(recipient_id= session_id, media_url=message.data.get('url'), media_type="image");
                 }elif(mime_type['file_type'] == "video") {
                     result = self.api().send_media(recipient_id= session_id, media_url=message.data.get('url'), media_type="video");
-                }else{
-                    self.logger.error(f"Unsupported media type: {mime_type['file_type']}");
                 }
 
                 # sending caption
@@ -216,8 +222,6 @@ node FacebookAction :Action: {
                             result = self.api().send_media(recipient_id= session_id, media_url=message_item.data.get('url'), media_type="image");
                         } elif(mime_type['file_type'] == "video") {
                             result = self.api().send_media(recipient_id= session_id, media_url=message_item.data.get('url'), media_type="video");
-                        }else{
-                            self.logger.error(f"Unsupported media type: {mime_type['file_type']}");
                         }
                         # sending caption
                         caption = self.sanitize_message(message = message_item.get_content());
@@ -231,7 +235,6 @@ node FacebookAction :Action: {
 
         return result;
     }
-
 
     can broadcast_message(message:InteractionMessage, ignore_list:list = []) -> str {
         # processes an agent response payload format and sends a message to all session_ids via the action
@@ -634,7 +637,8 @@ node FacebookAction :Action: {
                     'failure_count': len(job['failed']),
                     'pending_count': len(job['pending']),
                     'timestamp': datetime.now().isoformat()
-                }
+                },
+                json_body=None
             );
         }
     }
