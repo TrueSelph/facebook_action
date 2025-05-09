@@ -214,7 +214,7 @@ walker facebook_interact :interact_graph_walker: {
 
         if(self.is_directed_message(data)) {
             message = (root spawn interact(
-                utterance = data['caption'],
+                utterance = data['caption'] if data['caption'] else f'sent {data['message_type']} file in the chat',
                 agent_id = agent_node.id,
                 session_id = frame_node.session_id,
                 verbose = False,

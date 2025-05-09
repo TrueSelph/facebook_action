@@ -58,21 +58,26 @@ class FacebookAPI:
         params: Optional[Dict] = None,
         data: Optional[Dict] = None,
         headers: Optional[Dict] = None,
-        json_body: Optional[Dict] = None,
+        json_body: bool = True,
+        use_full_url: bool = False,
     ) -> Dict:
         """Centralized method to send HTTP requests with standardized error handling."""
-        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+
+        if use_full_url or endpoint.startswith(("http://", "https://")):
             url = endpoint
         else:
             url = f"{self.api_url}{endpoint}"
+
+        json_payload = data if json_body else None
+        body = None if json_body else data
 
         try:
             response = requests.request(
                 method=method.upper(),
                 url=url,
                 params=params,
-                data=data,
-                json=json_body,
+                data=body,
+                json=json_payload,
                 headers=headers,
                 timeout=self.timeout,
             )
@@ -118,7 +123,7 @@ class FacebookAPI:
             "verify_token": self.verify_token,
             "include_values": "true",
         }
-        return self.send_rest_request("POST", endpoint, params=params, json_body=data)
+        return self.send_rest_request("POST", endpoint, params=params, data=data)
 
     @staticmethod
     def parse_inbound_message(request: Dict) -> Dict:
@@ -174,7 +179,7 @@ class FacebookAPI:
         }
         params = {"access_token": self.access_token}
         return self.send_rest_request(
-            "POST", endpoint, headers=headers, json_body=data, params=params
+            "POST", endpoint, headers=headers, data=data, params=params
         )
 
     def send_media(
@@ -198,7 +203,7 @@ class FacebookAPI:
         }
         params = {"access_token": self.access_token}
         return self.send_rest_request(
-            "POST", endpoint, headers=headers, json_body=data, params=params
+            "POST", endpoint, headers=headers, data=data, params=params
         )
 
     def get_user_info(self, fields: str = "id,name") -> Dict:
@@ -242,7 +247,7 @@ class FacebookAPI:
         json_data = {"message": message}
         params = {"access_token": self.access_token}
         return self.send_rest_request(
-            "POST", endpoint, headers=headers, json_body=json_data, params=params
+            "POST", endpoint, headers=headers, data=json_data, params=params
         )
 
     def get_page_posts(self, limit: int = 10) -> Union[List, Dict]:
@@ -286,9 +291,7 @@ class FacebookAPI:
             "message": caption,
             "attached_media": [{"media_fbid": _id} for _id in image_ids],
         }
-        return self.send_rest_request(
-            "POST", endpoint, params=params, json_body=json_data
-        )
+        return self.send_rest_request("POST", endpoint, params=params, data=json_data)
 
     def post_videos_to_page(
         self, title: str, caption: str, video_urls: List[str]
@@ -315,9 +318,7 @@ class FacebookAPI:
             "message": caption,
             "attached_media": [{"media_fbid": _id} for _id in video_ids],
         }
-        return self.send_rest_request(
-            "POST", endpoint, params=params, json_body=json_data
-        )
+        return self.send_rest_request("POST", endpoint, params=params, data=json_data)
 
     @staticmethod
     def get_mime_type(
@@ -392,9 +393,7 @@ class FacebookAPI:
             "message": caption,
             "attached_media": [{"media_fbid": _id} for _id in media_ids],
         }
-        return self.send_rest_request(
-            "POST", endpoint, params=params, json_body=json_data
-        )
+        return self.send_rest_request("POST", endpoint, params=params, data=json_data)
 
     def get_post_comments(self, post_id: str, limit: int = 10) -> Union[List, Dict]:
         """Retrieves comments on a Facebook post."""
