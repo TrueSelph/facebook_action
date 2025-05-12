@@ -159,9 +159,12 @@ class FacebookAPI:
                 "data": request,
                 "parent_message_id": parent_message_id,
             }
+            return payload
         except Exception as e:
-            FacebookAPI.logger.error(f"Error processing inbound message: {e}")
-        return payload
+            FacebookAPI.logger.error(
+                f"Facebook API: Error processing inbound message: {e}"
+            )
+            return {"ok": False, "error": str(e)}
 
     def send_text_message(self, recipient_id: str, message: str) -> Dict:
         """Send text message to a Facebook user via Messenger."""
@@ -207,24 +210,29 @@ class FacebookAPI:
         params = {"fields": fields, "access_token": self.access_token}
         return self.send_rest_request("GET", endpoint, params=params)
 
-    def list_all_pages(self, limit: int = 100) -> List:
+    def list_all_pages(self, limit: int = 100) -> Union[List, Dict]:
         """Lists all pages managed by the user."""
-        all_pages = []
-        endpoint = "me/accounts"
-        params = {"access_token": self.access_token, "limit": limit}
 
-        while True:
-            response = self.send_rest_request("GET", endpoint, params=params)
-            if "error" in response:
-                return []
-            all_pages.extend(response.get("data", []))
-            paging = response.get("paging", {})
-            next_page = paging.get("next")
-            if not next_page:
-                break
-            endpoint = next_page
-            params = {}
-        return all_pages
+        try:
+            all_pages = []
+            endpoint = "me/accounts"
+            params = {"access_token": self.access_token, "limit": limit}
+
+            while True:
+                response = self.send_rest_request("GET", endpoint, params=params)
+                if "error" in response:
+                    return []
+                all_pages.extend(response.get("data", []))
+                paging = response.get("paging", {})
+                next_page = paging.get("next")
+                if not next_page:
+                    break
+                endpoint = next_page
+                params = {}
+            return all_pages
+        except Exception as e:
+            self.logger.error(f"Facebook API: Error listing pages: {e}")
+            return {"ok": False, "error": str(e)}
 
     def get_page_details(
         self,
@@ -265,59 +273,68 @@ class FacebookAPI:
 
     def post_images_to_page(self, image_urls: List[str], caption: str) -> Dict:
         """Uploads multiple photos to a Facebook page using URLs."""
-        image_ids = []
-        for image_url in image_urls:
-            endpoint = f"{self.page_id}/photos"
-            params = {
-                "access_token": self.access_token,
-                "url": image_url,
-                "published": "false",
+
+        try:
+            image_ids = []
+            for image_url in image_urls:
+                endpoint = f"{self.page_id}/photos"
+                params = {
+                    "access_token": self.access_token,
+                    "url": image_url,
+                    "published": "false",
+                }
+                response = self.send_rest_request("POST", endpoint, params=params)
+                if "error" not in response:
+                    image_ids.append(response.get("id"))
+
+            if not image_ids:
+                return {"error": "Failed to upload any images"}
+
+            endpoint = f"{self.page_id}/feed"
+            params = {"access_token": self.access_token}
+            json_data = {
+                "message": caption,
+                "attached_media": [{"media_fbid": _id} for _id in image_ids],
             }
-            response = self.send_rest_request("POST", endpoint, params=params)
-            if "error" not in response:
-                image_ids.append(response.get("id"))
-
-        if not image_ids:
-            return {"error": "Failed to upload any images"}
-
-        endpoint = f"{self.page_id}/feed"
-        params = {"access_token": self.access_token}
-        json_data = {
-            "message": caption,
-            "attached_media": [{"media_fbid": _id} for _id in image_ids],
-        }
-        return self.send_rest_request(
-            "POST", endpoint, params=params, json_body=json_data
-        )
+            return self.send_rest_request(
+                "POST", endpoint, params=params, json_body=json_data
+            )
+        except Exception as e:
+            self.logger.error(f"Facebook API: Error posting images: {e}")
+            return {"ok": False, "error": str(e)}
 
     def post_videos_to_page(
         self, title: str, caption: str, video_urls: List[str]
     ) -> Dict:
         """Uploads multiple videos to a Facebook page using URLs."""
-        video_ids = []
-        for video_url in video_urls:
-            endpoint = f"{self.page_id}/videos"
-            params = {
-                "access_token": self.access_token,
-                "title": title,
-                "file_url": video_url,
+        try:
+            video_ids = []
+            for video_url in video_urls:
+                endpoint = f"{self.page_id}/videos"
+                params = {
+                    "access_token": self.access_token,
+                    "title": title,
+                    "file_url": video_url,
+                }
+                response = self.send_rest_request("POST", endpoint, params=params)
+                if "error" not in response:
+                    video_ids.append(response.get("id"))
+
+            if not video_ids:
+                return {"error": "Failed to upload any videos"}
+
+            endpoint = f"{self.page_id}/feed"
+            params = {"access_token": self.access_token}
+            json_data = {
+                "message": caption,
+                "attached_media": [{"media_fbid": _id} for _id in video_ids],
             }
-            response = self.send_rest_request("POST", endpoint, params=params)
-            if "error" not in response:
-                video_ids.append(response.get("id"))
-
-        if not video_ids:
-            return {"error": "Failed to upload any videos"}
-
-        endpoint = f"{self.page_id}/feed"
-        params = {"access_token": self.access_token}
-        json_data = {
-            "message": caption,
-            "attached_media": [{"media_fbid": _id} for _id in video_ids],
-        }
-        return self.send_rest_request(
-            "POST", endpoint, params=params, json_body=json_data
-        )
+            return self.send_rest_request(
+                "POST", endpoint, params=params, json_body=json_data
+            )
+        except Exception as e:
+            self.logger.error(f"Facebook API: Error posting videos: {e}")
+            return {"ok": False, "error": str(e)}
 
     @staticmethod
     def get_mime_type(
@@ -357,44 +374,50 @@ class FacebookAPI:
 
     def post_media_to_page(self, caption: str, media_urls: List[Dict]) -> Dict:
         """Posts media (images or videos) to a Facebook page using URLs."""
-        media_ids = []
-        for media in media_urls:
-            media_url = media.get("url")
-            mime_info = self.get_mime_type(url=media_url)
-            media_type = mime_info.get("file_type") if mime_info else None
 
-            if media_type == "video":
-                endpoint = f"{self.page_id}/videos"
-                params = {
-                    "access_token": self.access_token,
-                    "file_url": media_url,
-                }
-            elif media_type == "image":
-                endpoint = f"{self.page_id}/photos"
-                params = {
-                    "access_token": self.access_token,
-                    "url": media_url,
-                    "published": "false",
-                }
-            else:
-                continue
+        try:
 
-            response = self.send_rest_request("POST", endpoint, params=params)
-            if "error" not in response:
-                media_ids.append(response.get("id"))
+            media_ids = []
+            for media in media_urls:
+                media_url = media.get("url")
+                mime_info = self.get_mime_type(url=media_url)
+                media_type = mime_info.get("file_type") if mime_info else None
 
-        if not media_ids:
-            return {"error": "No valid media uploaded"}
+                if media_type == "video":
+                    endpoint = f"{self.page_id}/videos"
+                    params = {
+                        "access_token": self.access_token,
+                        "file_url": media_url,
+                    }
+                elif media_type == "image":
+                    endpoint = f"{self.page_id}/photos"
+                    params = {
+                        "access_token": self.access_token,
+                        "url": media_url,
+                        "published": "false",
+                    }
+                else:
+                    continue
 
-        endpoint = f"{self.page_id}/feed"
-        params = {"access_token": self.access_token}
-        json_data = {
-            "message": caption,
-            "attached_media": [{"media_fbid": _id} for _id in media_ids],
-        }
-        return self.send_rest_request(
-            "POST", endpoint, params=params, json_body=json_data
-        )
+                response = self.send_rest_request("POST", endpoint, params=params)
+                if "error" not in response:
+                    media_ids.append(response.get("id"))
+
+            if not media_ids:
+                return {"error": "No valid media uploaded"}
+
+            endpoint = f"{self.page_id}/feed"
+            params = {"access_token": self.access_token}
+            json_data = {
+                "message": caption,
+                "attached_media": [{"media_fbid": _id} for _id in media_ids],
+            }
+            return self.send_rest_request(
+                "POST", endpoint, params=params, json_body=json_data
+            )
+        except Exception as e:
+            self.logger.error(f"Facebook API: Error posting media: {e}")
+            return {"ok": False, "error": str(e)}
 
     def get_post_comments(self, post_id: str, limit: int = 10) -> Union[List, Dict]:
         """Retrieves comments on a Facebook post."""

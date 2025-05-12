@@ -97,25 +97,66 @@ node FacebookAction :Action: {
 
     can healthcheck() -> Union[bool, dict] {
         try {
-            # Check if the types of attributes are as expected
-            if (
-                self.base_url and
-                self.app_id and
-                self.app_secret and
-                self.page_access_token and
-                self.subscribed_fields and
-                self.webhook_verify_token and
-                self.webhook_url
-            ) {
-                self.api().get_page_posts(1);
-                return True;  # All checks passed
+            if(not self.app_id) {
+                return {
+                    "status": False,
+                    "message": "APP ID is not set.",
+                    "severity": "error"
+                };
             }
 
-            return False;  # One or more type checks failed
+            if(not self.app_secret) {
+                return {
+                    "status": False,
+                    "message": "APP SECRET is not set.",
+                    "severity": "error"
+                };
+            }
 
-        } except Exception as e{
-            self.logger.error(f"An exception occurred in {self.label}:\n{traceback.format_exc()}\n");
-            return False;
+            if(not self.page_id) {
+                return {
+                    "status": False,
+                    "message": "PAGE ID is not set.",
+                    "severity": "error"
+                };
+            }
+
+            if(not self.page_access_token) {
+                return {
+                    "status": False,
+                    "message": "PAGE ACCESS TOKEN is not set.",
+                    "severity": "error"
+                };
+            }
+
+            posts = self.api().get_page_posts(1);
+            if "error" in posts {
+                return {
+                    "status": False,
+                    "message": f"{posts['error']}",
+                    "severity": "error"
+                };
+            }
+
+
+            test_webhook = self.api().register_session(self.webhook_url);
+            if "error" in test_webhook {
+                return {
+                    "status": False,
+                    "message": f"{test_webhook['error']}",
+                    "severity": "error"
+                };
+            }
+
+            self.logger.warning(f"post fb: {posts} \n webhook: {test_webhook}");
+            return True;
+        } except Exception as e {
+            self.logger.error(f"An exception occurred in {self.label}: \n{traceback.format_exc()}\n");
+            return {
+                "status": False,
+                "message": "There was an error : {e}",
+                "severity": "error"
+            };
         }
     }
 
@@ -141,26 +182,23 @@ node FacebookAction :Action: {
         # setup procedure for webhook registration on api
 
         result = {};
-
         agent_id = self.get_agent().id;
         module_root = self.get_module_root();
         # generate webhook key
         webhook_key = AgentInterface.encrypt_webhook_key(agent_id=agent_id, module_root=module_root, walker="facebook_interact");
 
+        if(not self.enabled) {
+            return False;
+        }
+
         if(self.base_url and self.api_url and webhook_key) {
             # complete the full webhook url
             self.webhook_url = f'{self.base_url}/webhook/{webhook_key}';
-            self.logger.debug(f'facebook webhook url: {self.webhook_url}');
 
             result = self.api().register_session(webhook_url = self.webhook_url);
 
-            if result is not None and result.get('status') != 'ERROR' {
-                # check if the response contains a valid token
-                if result.get('token') {
-                    self.token = result.get('token');
-                    # remove the token from the payload now that we've saved it
-                    del result['token'];
-                }
+            if(not result.get("success")){
+                result = False;
             }
 
         } else {

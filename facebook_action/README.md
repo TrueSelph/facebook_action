@@ -13,7 +13,7 @@ This action manages agent configurations for communication through the Facebook 
 - **Name:** `jivas/facebook_action`
 - **Author:** [V75 Inc.](https://v75inc.com/)
 - **Architype:** `FacebookAction`
-- **Version:** 0.0.1
+- **Version:** 0.0.4
 
 ## Meta Information
 
