@@ -27,7 +27,6 @@ node FacebookAction :Action: {
     has app_secret:str = "";
     has page_id:str = "";
     has page_access_token:str = "";
-    has subscribed_fields: str = "feed,messages";
     has webhook_verify_token:str = "123";
     # API settings
     has use_pushname:bool = True;
@@ -172,7 +171,6 @@ node FacebookAction :Action: {
             page_id=self.page_id,
             verify_token=self.webhook_verify_token,
             access_token=self.page_access_token,
-            fields=self.subscribed_fields,
             timeout=self.request_timeout
         );
 
