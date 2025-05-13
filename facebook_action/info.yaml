@@ -2,7 +2,7 @@ package:
   name: jivas/facebook_action
   author: V75 Inc.
   architype: FacebookAction
-  version: 0.0.1
+  version: 0.0.2
   meta:
     title: Facebook Action
     description: Manages configurations per agent for Facebook API communications.
@@ -11,6 +11,10 @@ package:
   config:
     singleton: true
   dependencies:
-    jivas: ^2.0.0
+    jivas: '>=2.0.0-alpha.40'
+    actions:
+      jivas/pulse_action: "~0.0.2"
+
+
 
 
