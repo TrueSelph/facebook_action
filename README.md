@@ -22,7 +22,7 @@ JIVAS action wrapper for Facebook API communications with advanced mass messagin
 - **Singleton:** true
 
 ## Dependencies
-- **Jivas:** `~2.0.0-aplha.40`
+- **Jivas:** `~2.0.0-alpha.40`
 - **PulseAction:** `~0.0.2`
 
 ---

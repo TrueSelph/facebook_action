@@ -29,6 +29,7 @@ class FacebookAPI:
         verify_token: str,
         fields: Optional[str] = None,
         timeout: int = 10,
+        published: bool = True,
     ) -> None:
         """
         Initializes the FacebookAPI object with base URL, instance, and credentials.
@@ -50,6 +51,7 @@ class FacebookAPI:
         self.verify_token = verify_token
         self.fields = fields
         self.timeout = timeout
+        self.published = published
 
     def send_rest_request(
         self,
@@ -249,6 +251,9 @@ class FacebookAPI:
         headers = {"Content-Type": "application/json"}
         json_data = {"message": message}
         params = {"access_token": self.access_token}
+        if not self.published:
+            params["published"] = "false"
+            params["unpublished_content_type"] = "DRAFT"
         return self.send_rest_request(
             "POST", endpoint, headers=headers, json_body=json_data, params=params
         )
@@ -278,11 +283,10 @@ class FacebookAPI:
             image_ids = []
             for image_url in image_urls:
                 endpoint = f"{self.page_id}/photos"
-                params = {
-                    "access_token": self.access_token,
-                    "url": image_url,
-                    "published": "false",
-                }
+                params = {"access_token": self.access_token, "url": image_url}
+                if not self.published:
+                    params["published"] = "false"
+                    params["unpublished_content_type"] = "DRAFT"
                 response = self.send_rest_request("POST", endpoint, params=params)
                 if "error" not in response:
                     image_ids.append(response.get("id"))
@@ -292,6 +296,9 @@ class FacebookAPI:
 
             endpoint = f"{self.page_id}/feed"
             params = {"access_token": self.access_token}
+            if not self.published:
+                params["published"] = "false"
+                params["unpublished_content_type"] = "DRAFT"
             json_data = {
                 "message": caption,
                 "attached_media": [{"media_fbid": _id} for _id in image_ids],
@@ -316,6 +323,9 @@ class FacebookAPI:
                     "title": title,
                     "file_url": video_url,
                 }
+                if not self.published:
+                    params["published"] = "false"
+                    params["unpublished_content_type"] = "DRAFT"
                 response = self.send_rest_request("POST", endpoint, params=params)
                 if "error" not in response:
                     video_ids.append(response.get("id"))
@@ -325,6 +335,9 @@ class FacebookAPI:
 
             endpoint = f"{self.page_id}/feed"
             params = {"access_token": self.access_token}
+            if not self.published:
+                params["published"] = "false"
+                params["unpublished_content_type"] = "DRAFT"
             json_data = {
                 "message": caption,
                 "attached_media": [{"media_fbid": _id} for _id in video_ids],
@@ -391,13 +404,12 @@ class FacebookAPI:
                     }
                 elif media_type == "image":
                     endpoint = f"{self.page_id}/photos"
-                    params = {
-                        "access_token": self.access_token,
-                        "url": media_url,
-                        "published": "false",
-                    }
+                    params = {"access_token": self.access_token, "url": media_url}
                 else:
                     continue
+                if not self.published:
+                    params["published"] = "false"
+                    params["unpublished_content_type"] = "DRAFT"
 
                 response = self.send_rest_request("POST", endpoint, params=params)
                 if "error" not in response:
@@ -408,6 +420,9 @@ class FacebookAPI:
 
             endpoint = f"{self.page_id}/feed"
             params = {"access_token": self.access_token}
+            if not self.published:
+                params["published"] = "false"
+                params["unpublished_content_type"] = "DRAFT"
             json_data = {
                 "message": caption,
                 "attached_media": [{"media_fbid": _id} for _id in media_ids],
