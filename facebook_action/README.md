@@ -22,7 +22,7 @@ JIVAS action wrapper for Facebook API communications with advanced mass messagin
 - **Singleton:** true
 
 ## Dependencies
-- **Jivas:** `~2.0.0-aplha.40`
+- **Jivas:** `~2.0.0-alpha.40`
 - **PulseAction:** `~0.0.2`
 
 ---
@@ -73,6 +73,7 @@ To use the Facebook Action, you need to set up the following configuration param
 | `outbox_max_send_interval`    | float  | The maximum allowed delay (seconds).                                                           | `10.0`                                                                                                                                                              |
 | `outbox_min_batch_size`       | int    | The minimum batch size of messages to send from the outbox.                                     | `1`                                                                                                                                                                 |
 | `outbox_max_batch_size`       | int    | The maximum batch size of messages to send from the outbox.                                     | `10`                                                                                                                                                                |
+| `published`                   | bool   | Publish messages to the Facebook page when set to `True`.                                    | `True`                                                                                                                                                                |
 
 ---
 
