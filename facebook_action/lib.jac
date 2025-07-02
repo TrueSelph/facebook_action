@@ -1,5 +1,7 @@
-include:jac facebook_action;
-include:jac facebook_interact;
-include:jac register_session;
-include:jac send_messages;
-include:jac broadcast_message;
+import from actions.jivas.facebook_action {
+    facebook_action,
+    facebook_interact,
+    register_session,
+    send_messages,
+    broadcast_message
+}

@@ -1,16 +1,17 @@
-import:py logging;
-import:py re;
-import:py from logging { Logger }
-import:py from modules.facebook_api { FacebookAPI }
-import:py from jivas.agent.modules.agentlib.utils { Utils }
-import:jac from jivas.agent.core.agent { Agent }
-import:jac from jivas.agent.memory.frame { Frame }
-import:jac from jivas.agent.action.action { Action }
-import:jac from jivas.agent.action.interact { interact }
-import:jac from jivas.agent.action.interact_graph_walker { interact_graph_walker }
+import logging;
+import re;
+import from logging { Logger }
+import from modules.facebook_api { FacebookAPI }
+import from jivas.agent.modules.agentlib.utils { Utils }
+import from jivas.agent.core.agent { Agent }
+import from jivas.agent.memory.frame { Frame }
+import from jivas.agent.action.action { Action }
+import from jivas.agent.action.interact { interact }
+import from jivas.agent.action.interact_graph_walker { interact_graph_walker }
+import from jac_cloud.plugin.jaseci { JacPlugin as Jac }
 
 
-walker facebook_interact :interact_graph_walker: {
+walker facebook_interact(interact_graph_walker) {
     # called via a webhook whenever there are verification requests or inbound messages
     # when activated, it will trigger the facebook interact action to communicate
 
@@ -110,7 +111,7 @@ walker facebook_interact :interact_graph_walker: {
         }
     }
 
-    can is_directed_message(data:dict) -> bool {
+    def is_directed_message(data:dict) -> bool {
         # interprets the data to determine whether it's a direct group reply or valid direct chat with content
 
         if('author' in data and data['author']) {
@@ -130,7 +131,7 @@ walker facebook_interact :interact_graph_walker: {
         return True;
     }
 
-    can handle_chat_message(data:dict, agent_node:Agent, frame_node:Frame, action_node:Action) {
+    def handle_chat_message(data:dict, agent_node:Agent, frame_node:Frame, action_node:Action) {
         if(self.is_directed_message(data)) {
             # only respond if we have a message and if we are messaged with @ in groups
 
@@ -147,7 +148,7 @@ walker facebook_interact :interact_graph_walker: {
         }
     }
 
-    can handle_voicenote_message(data:dict, agent_node:Agent, frame_node:Frame, action_node:Action) {
+    def handle_voicenote_message(data:dict, agent_node:Agent, frame_node:Frame, action_node:Action) {
         # This action downloads the voicenote audio transcribes it and passes it to interact walker as text to be processed
 
 
@@ -209,7 +210,7 @@ walker facebook_interact :interact_graph_walker: {
         }
     }
 
-    can handle_media_message(data:dict, agent_node:Agent, frame_node:Frame, action_node:Action) {
+    def handle_media_message(data:dict, agent_node:Agent, frame_node:Frame, action_node:Action) {
         # add document resource to data node in interaction
 
         if(self.is_directed_message(data)) {
