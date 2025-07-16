@@ -218,7 +218,7 @@ node FacebookAction(Action) {
     def send_message(session_id:str, message:InteractionMessage) -> dict {
         # processes an agent response payload format and sends an Facebook message to a specified session_id via the action
         if(message and session_id) {
-            parent_message_id = message.get_meta('parent_message_id');
+            parent_message_id = message.data_get('parent_message_id');
 
             if (message.get_type() == MessageType.SILENCE.value) {}
             elif(message.get_type() == MessageType.TEXT.value) {

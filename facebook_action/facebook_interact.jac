@@ -7,11 +7,11 @@ import from jivas.agent.core.agent { Agent }
 import from jivas.agent.memory.frame { Frame }
 import from jivas.agent.action.action { Action }
 import from jivas.agent.action.interact { interact }
-import from jivas.agent.action.interact_graph_walker { interact_graph_walker }
+import from jivas.agent.action.agent_graph_walker { agent_graph_walker }
 import from jac_cloud.plugin.jaseci { JacPlugin as Jac }
 
 
-walker facebook_interact(interact_graph_walker) {
+walker facebook_interact(agent_graph_walker) {
     # called via a webhook whenever there are verification requests or inbound messages
     # when activated, it will trigger the facebook interact action to communicate
 
@@ -176,7 +176,7 @@ walker facebook_interact(interact_graph_walker) {
                 verbose = False,
                 reporting = False,
                 channel = "facebook",
-                data = [{"label": "facebook_voicenote", "meta": {"data_type": attachment_type}, "content": data_media}]
+                data = {"facebook_voicenote": data_media}
             )).message;
         }
 
@@ -184,12 +184,12 @@ walker facebook_interact(interact_graph_walker) {
         # now we grab the response and send it
         if(message) {
             has_tts_response = False;
-            parent_message_id = message.get_meta('parent_message_id');
+            parent_message_id = message.data_get('parent_message_id');
 
             if(tts_action := agent_node.get_tts_action()) {
 
                 # synthesize an audio for the user, cater to phoneme_message, if available
-                content = message.get_meta('phoneme_content') or message.get_content();
+                content = message.data_get('phoneme_content') or message.get_content();
 
 
                 # perform TTS
@@ -221,7 +221,7 @@ walker facebook_interact(interact_graph_walker) {
                 verbose = False,
                 reporting = False,
                 channel = "facebook",
-                data = [{"label": "facebook_media", "meta": {"data_type": "json"}, "content": data['attachments']}]
+                data = {"facebook_media": data['attachments']}
             )).message;
 
             action_node.send_message(session_id=frame_node.session_id, message=message);
