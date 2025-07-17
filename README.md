@@ -6,7 +6,7 @@
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/TrueSelph/facebook_action)
 ![GitHub](https://img.shields.io/github/license/TrueSelph/facebook_action)
 
-JIVAS action wrapper for Facebook API communications with advanced mass messaging outbox. This action provides a wrapper for Facebook API communications using the [Facebook Developer API](https://developers.facebook.com/docs). As a core action, it simplifies and streamlines interactions with Facebook. The package is a singleton and requires the Jivas library version ^2.0.0.
+JIVAS action wrapper for Facebook API communications with advanced mass messaging outbox. This action provides a wrapper for Facebook API communications using the [Facebook Developer API](https://developers.facebook.com/docs). As a core action, it simplifies and streamlines interactions with Facebook. The package is a singleton and requires the Jivas library version ^2.1.0.
 
 ## Package Information
 - **Name:** `jivas/facebook_action`
@@ -22,8 +22,8 @@ JIVAS action wrapper for Facebook API communications with advanced mass messagin
 - **Singleton:** true
 
 ## Dependencies
-- **Jivas:** `~2.0.0-alpha.40`
-- **PulseAction:** `~0.0.2`
+- **Jivas:** `~2.1.0`
+- **PulseAction:** `~0.1.0`
 
 ---
 
