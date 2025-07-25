@@ -8,7 +8,7 @@ import from logging { Logger }
 import from datetime { datetime }
 import from modules.facebook_api { FacebookAPI }
 import from jivas.agent.modules.agentlib.utils { Utils }
-import from jvserve.lib.agent_interface { AgentInterface }
+import from jvserve.lib.agent_interface { encrypt_webhook_key_exec }
 import from jivas.agent.action.action { Action }
 import from jivas.agent.memory.interaction_response {
     MessageType, InteractionMessage, TextInteractionMessage, MediaInteractionMessage, MultiInteractionMessage
@@ -187,7 +187,7 @@ node FacebookAction(Action) {
         agent_id = self.get_agent().id;
         module_root = self.get_module_root();
         # generate webhook key
-        webhook_key = AgentInterface.encrypt_webhook_key(agent_id=agent_id, module_root=module_root, walker="facebook_interact");
+        webhook_key = encrypt_webhook_key_exec(agent_id=agent_id, module_root=module_root, walker="facebook_interact");
 
         if(not self.enabled) {
             return False;
@@ -195,7 +195,7 @@ node FacebookAction(Action) {
 
         if(self.base_url and self.api_url and webhook_key) {
             # complete the full webhook url
-            self.webhook_url = f'{self.base_url}/webhook/{webhook_key}';
+            self.webhook_url = f'{self.base_url}/action/webhook/{webhook_key}';
 
             result = self.api().register_session(webhook_url = self.webhook_url);
 
