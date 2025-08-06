@@ -36,7 +36,8 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
         # Register Webhook button
         if st.button("Register Webhook", key=f"{model_key}_btn_register_webhook"):
             result = call_api(
-                endpoint="action/walker/facebook_action/register_session", json_data={"agent_id": agent_id}
+                endpoint="action/walker/facebook_action/register_session",
+                json_data={"agent_id": agent_id},
             )
 
             if result:

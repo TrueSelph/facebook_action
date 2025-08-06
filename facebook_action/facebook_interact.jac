@@ -6,11 +6,11 @@ import from jivas.agent.core.agent { Agent }
 import from jivas.agent.memory.frame { Frame }
 import from jivas.agent.action.action { Action }
 import from jivas.agent.action.interact { interact }
-import from jivas.agent.action.agent_graph_walker { agent_graph_walker }
+import from jivas.agent.action.action_webhook_walker { action_webhook_walker }
 import from jac_cloud.plugin.jaseci { JacPlugin as Jac }
 
 
-walker facebook_interact(agent_graph_walker) {
+walker facebook_interact(action_webhook_walker) {
     # called via a webhook whenever there are verification requests or inbound messages
     # when activated, it will trigger the facebook interact action to communicate
 
