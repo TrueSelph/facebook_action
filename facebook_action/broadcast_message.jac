@@ -3,11 +3,12 @@ import from logging { Logger }
 import from jivas.agent.core.agent { Agent }
 import from jivas.agent.action.action { Action }
 import from jivas.agent.action.actions { Actions }
+import from jivas.agent.modules.action.path { action_walker_path }
 import from jivas.agent.action.agent_graph_walker { agent_graph_walker }
+import from jac_cloud.plugin.jaseci { JacPlugin as Jac }
 import from jivas.agent.memory.interaction_response {
     MessageType, InteractionMessage, TextInteractionMessage, MediaInteractionMessage, MultiInteractionMessage
 }
-import from jac_cloud.plugin.jaseci { JacPlugin as Jac }
 
 
 walker broadcast_message(agent_graph_walker) {
@@ -65,13 +66,14 @@ walker broadcast_message(agent_graph_walker) {
     has message:dict = {};
     has ignore_list:list = [];
     has response:str = '';
+    has reporting:bool = True;
 
     # set up logger
     static has logger:Logger = logging.getLogger(__name__);
 
-    obj __specs__ {
-        # make this walker visible in API
+    class __specs__ {
         static has private: bool = False;
+        static has path: str = action_walker_path(__module__);
     }
 
     can on_agent with Agent entry {
@@ -100,6 +102,10 @@ walker broadcast_message(agent_graph_walker) {
 
         interaction_message = here.prepare_interaction_message(message=self.message);
         self.response = here.broadcast_message(message=interaction_message, ignore_list=self.ignore_list);
+
+        if self.reporting {
+            report self.response;
+        }
     }
 
 }

@@ -2,7 +2,6 @@ import logging;
 import re;
 import from logging { Logger }
 import from modules.facebook_api { FacebookAPI }
-import from jivas.agent.modules.agentlib.utils { Utils }
 import from jivas.agent.core.agent { Agent }
 import from jivas.agent.memory.frame { Frame }
 import from jivas.agent.action.action { Action }

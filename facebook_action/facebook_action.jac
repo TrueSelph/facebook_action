@@ -7,9 +7,10 @@ import from typing { Union }
 import from logging { Logger }
 import from datetime { datetime }
 import from modules.facebook_api { FacebookAPI }
-import from jivas.agent.modules.agentlib.utils { Utils }
-import from jvserve.lib.agent_interface { encrypt_webhook_key_exec }
+import from jivas.agent.modules.data.mime_types { get_mime_type }
+import from jivas.agent.modules.text.chunking { chunk_long_message }
 import from jivas.agent.action.action { Action }
+import from .facebook_interact { facebook_interact }
 import from jivas.agent.memory.interaction_response {
     MessageType, InteractionMessage, TextInteractionMessage, MediaInteractionMessage, MultiInteractionMessage
 }
@@ -42,6 +43,7 @@ node FacebookAction(Action) {
     has outbox_max_batch_size:int = 10; # the maximum batch size of messages to send from the outbox
     has outbox:dict = {}; # outbox for outgoing mass messages
     has published:bool = True;
+    has webhook_token_expiry_days:int = 30;
 
 
 
@@ -184,18 +186,22 @@ node FacebookAction(Action) {
         # setup procedure for webhook registration on api
 
         result = {};
+        base_url = self.base_url;
         agent_id = self.get_agent().id;
-        module_root = self.get_module_root();
+
         # generate webhook key
-        webhook_key = encrypt_webhook_key_exec(agent_id=agent_id, module_root=module_root, walker="facebook_interact");
+        webhook_walker = facebook_interact(agent_id=agent_id);
+        self.webhook_url = webhook_walker.get_callback_url(
+            base_url=self.base_url,
+            agent_id=agent_id,
+            expiration = self.webhook_token_expiry_days
+        );
 
         if(not self.enabled) {
             return False;
         }
 
-        if(self.base_url and self.api_url and webhook_key) {
-            # complete the full webhook url
-            self.webhook_url = f'{self.base_url}/action/webhook/{webhook_key}';
+        if(self.webhook_url and self.api_url) {
 
             result = self.api().register_session(webhook_url = self.webhook_url);
 
@@ -223,14 +229,14 @@ node FacebookAction(Action) {
             if (message.get_type() == MessageType.SILENCE.value) {}
             elif(message.get_type() == MessageType.TEXT.value) {
                 content = self.sanitize_message(message = message.get_content());
-                outgoing = Utils.chunk_long_message(message=content, max_length = self.chunk_length, chunk_length = self.chunk_length);
+                outgoing = chunk_long_message(message=content, max_length = self.chunk_length, chunk_length = self.chunk_length);
 
                 for chunk in outgoing {
                     result = self.api().send_text_message(recipient_id=session_id, message=chunk);
                 }
             } elif(message.get_type() == MessageType.MEDIA.value) {
                 # sending media
-                mime_type = Utils.get_mime_type(mime_type=message.mime);
+                mime_type = get_mime_type(mime_type=message.mime);
                 if(mime_type['file_type'] == "document") {
                     result = self.api().send_media(recipient_id= session_id, media_url=message.data.get('url'), media_type="document");
                 }elif(mime_type['file_type'] == "image") {
@@ -248,14 +254,14 @@ node FacebookAction(Action) {
                 for message_item in message.get_content_items() {
                     if(message_item.get_type() == MessageType.TEXT.value) {
                         message = self.sanitize_message(message = message_item.get_content());
-                        outgoing = Utils.chunk_long_message(message=message, max_length = self.chunk_length, chunk_length = self.chunk_length);
+                        outgoing = chunk_long_message(message=message, max_length = self.chunk_length, chunk_length = self.chunk_length);
 
                         for chunk in outgoing {
                             result = self.api().send_text_message(recipient_id=session_id, message=chunk);
                         }
                     } elif(message_item.get_type() == MessageType.MEDIA.value) {
                         # sending media
-                        mime_type = Utils.get_mime_type(mime_type=message_item.mime);
+                        mime_type = get_mime_type(mime_type=message_item.mime);
                         if(mime_type['file_type'] == "document") {
                             result = self.api().send_media(recipient_id= session_id, media_url=message_item.data.get('url'), media_type="document");
                         } elif(mime_type['file_type'] == "image") {
