@@ -1,8 +1,8 @@
 """Provide the Streamlit UI for the Facebook action."""
 
 import streamlit as st
-from jvcli.client.lib.utils import call_action_walker_exec
-from jvcli.client.lib.widgets import app_controls, app_header, app_update_action
+from jvclient.lib.utils import call_api
+from jvclient.lib.widgets import app_controls, app_header, app_update_action
 from streamlit_router import StreamlitRouter
 
 
@@ -35,8 +35,9 @@ def render(router: StreamlitRouter, agent_id: str, action_id: str, info: dict) -
 
         # Register Webhook button
         if st.button("Register Webhook", key=f"{model_key}_btn_register_webhook"):
-            result = call_action_walker_exec(
-                agent_id, module_root, "register_session", {}
+            result = call_api(
+                endpoint="action/walker/facebook_action/register_session",
+                json_data={"agent_id": agent_id},
             )
 
             if result:
