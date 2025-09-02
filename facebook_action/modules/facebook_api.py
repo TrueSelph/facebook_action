@@ -283,10 +283,11 @@ class FacebookAPI:
             image_ids = []
             for image_url in image_urls:
                 endpoint = f"{self.page_id}/photos"
-                params = {"access_token": self.access_token, "url": image_url}
-                if not self.published:
-                    params["published"] = "false"
-                    params["unpublished_content_type"] = "DRAFT"
+                params = {
+                    "access_token": self.access_token,
+                    "url": image_url,
+                    "published": "false",
+                }
                 response = self.send_rest_request("POST", endpoint, params=params)
                 if "error" not in response:
                     image_ids.append(response.get("id"))
@@ -322,10 +323,8 @@ class FacebookAPI:
                     "access_token": self.access_token,
                     "title": title,
                     "file_url": video_url,
+                    "published": "false",
                 }
-                if not self.published:
-                    params["published"] = "false"
-                    params["unpublished_content_type"] = "DRAFT"
                 response = self.send_rest_request("POST", endpoint, params=params)
                 if "error" not in response:
                     video_ids.append(response.get("id"))
@@ -364,6 +363,10 @@ class FacebookAPI:
             try:
                 response = requests.head(url, allow_redirects=True)
                 detected_mime_type = response.headers.get("Content-Type")
+
+                # Fallback if server lies or sends generic type
+                if not detected_mime_type or detected_mime_type == "application/json":
+                    detected_mime_type, _ = mimetypes.guess_type(url)
             except requests.RequestException:
                 return None
         else:
@@ -407,9 +410,8 @@ class FacebookAPI:
                     params = {"access_token": self.access_token, "url": media_url}
                 else:
                     continue
-                if not self.published:
-                    params["published"] = "false"
-                    params["unpublished_content_type"] = "DRAFT"
+
+                params["published"] = "false"
 
                 response = self.send_rest_request("POST", endpoint, params=params)
                 if "error" not in response:
